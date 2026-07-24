@@ -1,24 +1,25 @@
 # B2B Compliance Gateway
 
-A serverless, polyglot enterprise compliance gateway that detects PII, credentials, and regulatory exposures in log data using AI-powered analytics.
+A fully serverless enterprise compliance gateway that detects PII, credentials, and regulatory exposures in log data using AI-powered analytics.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        CLIENT LAYER                                 │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│  │  Frontend        │  │  Ingestion SDK   │  │  Local Parser    │  │
-│  │  (Next.js 14)    │  │  (Vanilla JS)    │  │  (Java + C++)    │  │
-│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘  │
-└───────────┼──────────────────────┼──────────────────────┼───────────┘
-            │                      │                      │
-            ▼                      ▼                      ▼
-┌───────────────────┐  ┌────────────────────┐  ┌────────────────────┐
-│   Supabase Auth   │  │  Serverless Edge   │  │  JNI Native Core  │
-│   + PostgreSQL    │◄─┤  (Python/Vercel)   │  │  (C++ Scanner)    │
-│   + RLS Policies  │  │  + Gemini AI API   │  │  JNI FFM Bridge   │
-└───────────────────┘  └────────────────────┘  └────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                   CLIENT LAYER                       │
+│  ┌──────────────────┐  ┌──────────────────────────┐ │
+│  │  Frontend        │  │  Ingestion SDK            │ │
+│  │  (Next.js 14)    │  │  (Vanilla JS / Extension) │ │
+│  └────────┬─────────┘  └────────────┬─────────────┘ │
+└───────────┼──────────────────────────┼───────────────┘
+            │                          │
+            ▼                          ▼
+┌───────────────────┐  ┌────────────────────────────┐
+│   Supabase Auth   │  │  Vercel Serverless Edge     │
+│   + PostgreSQL    │◄─┤  • /api/ingest (AI)         │
+│   + RLS Policies  │  │  • /api/scan (Bulk Scan)    │
+└───────────────────┘  │  + Gemini AI API            │
+                       └────────────────────────────┘
 ```
 
 ## Modules
@@ -26,10 +27,36 @@ A serverless, polyglot enterprise compliance gateway that detects PII, credentia
 | Module | Stack | Location |
 |--------|-------|----------|
 | Database Layer | PostgreSQL, SQL, RLS | `/database-migrations` |
-| AI Analytics | Python 3.11, Vercel Edge, Gemini | `/serverless-ai-workers` |
-| Native Parser | Java 21, Spring Boot, C++20 | `/local-enterprise-parser` |
+| Serverless Workers | Python 3.11, Vercel, Gemini AI | `/serverless-ai-workers` |
 | Dashboard | Next.js 14, TypeScript, Tailwind | `/frontend-dashboard` |
 | Ingestion SDK | Vanilla JavaScript | `/injected-sdk-extension` |
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/ingest` | POST | Single log ingestion + AI analysis |
+| `/api/scan` | POST | Bulk content scanning (regex only) |
+| `/health` | GET | Health check |
+
+### POST /api/ingest
+
+```json
+{
+  "api_key": "your-org-api-key",
+  "content": "text to analyze",
+  "source": "form-submission"
+}
+```
+
+### POST /api/scan
+
+```json
+{
+  "content": "entry1\n---\nentry2\n---\nentry3",
+  "source": "bulk-upload"
+}
+```
 
 ## Quick Start
 
@@ -37,72 +64,54 @@ A serverless, polyglot enterprise compliance gateway that detects PII, credentia
 
 Run migrations in your Supabase SQL editor in order:
 
-```bash
-# Run each file in database-migrations/ sequentially
+```sql
 001_create_schema.sql
 002_rls_policies.sql
 003_api_functions.sql
 004_webhooks.sql
 ```
 
-### 2. Serverless AI Workers
+### 2. Deploy Serverless Workers
 
 ```bash
 cd serverless-ai-workers
 pip install -r requirements.txt
-# Set environment variables:
-#   SUPABASE_URL=https://your-project.supabase.co
-#   SUPABASE_KEY=your-anon-key
-#   GEMINI_API_KEY=your-gemini-key
-vercel dev
+# Set env vars in Vercel dashboard
+vercel --prod
 ```
 
-### 3. Local Enterprise Parser
-
-```bash
-cd local-enterprise-parser
-# Build C++ native library first
-cd native-core && ./build.sh
-
-# Build and run Java app
-cd ..
-./mvnw spring-boot:run
-```
-
-### 4. Frontend Dashboard
+### 3. Deploy Frontend Dashboard
 
 ```bash
 cd frontend-dashboard
 npm install
-# Set environment variables:
-#   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-npm run dev
+# Set env vars in Vercel dashboard
+vercel --prod
 ```
 
-### 5. Ingestion SDK
+### 4. Use the SDK
 
-```javascript
-import AuditGuard from './injected-sdk-extension/audit-guard.js';
-
-const guard = new AuditGuard({
-  endpoint: 'https://your-project.supabase.co/functions/v1/ingest',
-  apiKey: 'your-api-key',
-  orgId: 'your-org-id'
-});
-
-guard.track(data); // Sends to serverless analysis pipeline
+```html
+<script src="injected-sdk-extension/audit-guard.js"></script>
+<script>
+  const guard = new AuditGuard({
+    endpoint: 'https://your-deployment.vercel.app/api/ingest',
+    apiKey: 'your-api-key',
+    orgId: 'your-org-id'
+  });
+  guard.track({ action: 'login', user: 'admin@corp.com' });
+</script>
 ```
 
 ## Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `SUPABASE_URL` | Supabase project URL | Yes |
-| `SUPABASE_KEY` | Supabase anon/service key | Yes |
-| `GEMINI_API_KEY` | Google Gemini API key | Yes |
-| `NEXT_PUBLIC_SUPABASE_URL` | Public Supabase URL for frontend | Yes |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key for frontend | Yes |
+| Variable | Service | Description |
+|----------|---------|-------------|
+| `SUPABASE_URL` | Serverless | Supabase project URL |
+| `SUPABASE_KEY` | Serverless | Supabase service_role key |
+| `GEMINI_API_KEY` | Serverless | Google Gemini API key |
+| `NEXT_PUBLIC_SUPABASE_URL` | Dashboard | Public Supabase URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Dashboard | Public anon key |
 
 ## Security Model
 
@@ -110,7 +119,4 @@ guard.track(data); // Sends to serverless analysis pipeline
 - **API Key Validation**: HMAC SHA-256 hashing for server-to-server auth
 - **No Secrets in Code**: All credentials via environment variables
 - **Input Sanitization**: All ingestion payloads validated before processing
-
-## License
-
-Proprietary - Internal Use Only
+- **$0 Infrastructure**: Runs entirely on Vercel free tier + Supabase free tier
