@@ -1,122 +1,117 @@
 # B2B Compliance Gateway
 
-A fully serverless enterprise compliance gateway that detects PII, credentials, and regulatory exposures in log data using AI-powered analytics.
+Fully serverless compliance scanner. Zero external services, zero setup. Deploy to Vercel and it works.
+
+## What It Does
+
+Scans text for:
+- **PII**: SSNs, emails, phone numbers, credit cards
+- **Credentials**: Passwords, API keys, bearer tokens, private keys
+
+Returns a risk score (0-100) and detailed findings.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   CLIENT LAYER                       │
-│  ┌──────────────────┐  ┌──────────────────────────┐ │
-│  │  Frontend        │  │  Ingestion SDK            │ │
-│  │  (Next.js 14)    │  │  (Vanilla JS / Extension) │ │
-│  └────────┬─────────┘  └────────────┬─────────────┘ │
-└───────────┼──────────────────────────┼───────────────┘
-            │                          │
-            ▼                          ▼
-┌───────────────────┐  ┌────────────────────────────┐
-│   Supabase Auth   │  │  Vercel Serverless Edge     │
-│   + PostgreSQL    │◄─┤  • /api/ingest (AI)         │
-│   + RLS Policies  │  │  • /api/scan (Bulk Scan)    │
-└───────────────────┘  │  + Gemini AI API            │
-                       └────────────────────────────┘
+┌──────────────────┐      ┌─────────────────────────┐
+│  Frontend        │─────▶│  Vercel Serverless       │
+│  (Next.js 14)    │      │  /api/ingest (analysis)  │
+│                  │      │  /api/scan  (bulk)       │
+└──────────────────┘      └─────────────────────────┘
 ```
 
-## Modules
+No database. No auth service. No AI API. Just regex pattern matching and risk scoring.
 
-| Module | Stack | Location |
-|--------|-------|----------|
-| Database Layer | PostgreSQL, SQL, RLS | `/database-migrations` |
-| Serverless Workers | Python 3.11, Vercel, Gemini AI | `/serverless-ai-workers` |
-| Dashboard | Next.js 14, TypeScript, Tailwind | `/frontend-dashboard` |
-| Ingestion SDK | Vanilla JavaScript | `/injected-sdk-extension` |
+## Deploy
 
-## API Endpoints
+```bash
+# 1. Push to GitHub
+# 2. Import on vercel.com
+# 3. Done. No env vars needed.
+```
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/ingest` | POST | Single log ingestion + AI analysis |
-| `/api/scan` | POST | Bulk content scanning (regex only) |
-| `/health` | GET | Health check |
+Or locally:
+
+```bash
+cd serverless-ai-workers
+pip install -r requirements.txt
+vercel dev
+
+cd ../frontend-dashboard
+npm install
+npm run dev
+```
+
+## API
 
 ### POST /api/ingest
 
+Single content analysis with risk scoring.
+
 ```json
 {
-  "api_key": "your-org-api-key",
-  "content": "text to analyze",
+  "content": "My SSN is 123-45-6789 and password=secret123",
   "source": "form-submission"
+}
+```
+
+Response:
+```json
+{
+  "status": "completed",
+  "risk_score": 70,
+  "risk_level": "high",
+  "violations_found": 2,
+  "findings": [
+    {"type": "pii_ssn", "severity": "critical", "matched": "123-45-6789"},
+    {"type": "credential_password", "severity": "critical", "matched": "password=secret123"}
+  ]
 }
 ```
 
 ### POST /api/scan
 
+Bulk scan multiple entries (separated by `---`).
+
 ```json
 {
-  "content": "entry1\n---\nentry2\n---\nentry3",
+  "content": "entry 1\n---\nentry 2\n---\nentry 3",
   "source": "bulk-upload"
 }
 ```
 
-## Quick Start
+### GET /health
 
-### 1. Database Setup
+Returns `{"status": "healthy"}`.
 
-Run migrations in your Supabase SQL editor in order:
-
-```sql
-001_create_schema.sql
-002_rls_policies.sql
-003_api_functions.sql
-004_webhooks.sql
-```
-
-### 2. Deploy Serverless Workers
-
-```bash
-cd serverless-ai-workers
-pip install -r requirements.txt
-# Set env vars in Vercel dashboard
-vercel --prod
-```
-
-### 3. Deploy Frontend Dashboard
-
-```bash
-cd frontend-dashboard
-npm install
-# Set env vars in Vercel dashboard
-vercel --prod
-```
-
-### 4. Use the SDK
+## SDK
 
 ```html
 <script src="injected-sdk-extension/audit-guard.js"></script>
 <script>
   const guard = new AuditGuard({
-    endpoint: 'https://your-deployment.vercel.app/api/ingest',
-    apiKey: 'your-api-key',
-    orgId: 'your-org-id'
+    endpoint: 'https://your-app.vercel.app/api/ingest'
   });
-  guard.track({ action: 'login', user: 'admin@corp.com' });
+  guard.track({ email: 'user@example.com', action: 'login' });
 </script>
 ```
 
-## Environment Variables
+## Detection Patterns
 
-| Variable | Service | Description |
-|----------|---------|-------------|
-| `SUPABASE_URL` | Serverless | Supabase project URL |
-| `SUPABASE_KEY` | Serverless | Supabase service_role key |
-| `GEMINI_API_KEY` | Serverless | Google Gemini API key |
-| `NEXT_PUBLIC_SUPABASE_URL` | Dashboard | Public Supabase URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Dashboard | Public anon key |
+| Pattern | Severity | Regex |
+|---------|----------|-------|
+| SSN | Critical | `\d{3}-\d{2}-\d{4}` |
+| Email | Medium | `user@domain.com` |
+| Phone | Low | `+1 (555) 123-4567` |
+| Password | Critical | `password=...` |
+| Bearer Token | Critical | `Bearer eyJ...` |
+| API Key | High | `api_key=...` |
+| Private Key | Critical | `-----BEGIN PRIVATE KEY-----` |
+| Credit Card | High | `16-digit numbers` |
 
-## Security Model
+## Stack
 
-- **Row-Level Security**: All queries scoped to organization via JWT claims
-- **API Key Validation**: HMAC SHA-256 hashing for server-to-server auth
-- **No Secrets in Code**: All credentials via environment variables
-- **Input Sanitization**: All ingestion payloads validated before processing
-- **$0 Infrastructure**: Runs entirely on Vercel free tier + Supabase free tier
+- **Frontend**: Next.js 14, TypeScript, Tailwind CSS
+- **Backend**: Python serverless functions on Vercel
+- **Pattern Engine**: Python regex with risk scoring
+- **Infrastructure**: $0 (Vercel free tier)

@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List
 
 
 @dataclass
@@ -18,13 +18,8 @@ PATTERNS = {
         "severity": "critical",
         "description": "Social Security Number"
     },
-    "pii_ssn_no_dash": {
-        "pattern": r"\b\d{9}\b",
-        "severity": "high",
-        "description": "SSN without dashes"
-    },
     "pii_email": {
-        "pattern": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+        "pattern": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
         "severity": "medium",
         "description": "Email address"
     },
@@ -52,6 +47,11 @@ PATTERNS = {
         "pattern": r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----",
         "severity": "critical",
         "description": "Private key header"
+    },
+    "pii_credit_card": {
+        "pattern": r"\b(?:\d[ -]*?){13,16}\b",
+        "severity": "high",
+        "description": "Credit card number"
     }
 }
 
@@ -82,14 +82,58 @@ def calculate_risk_score(matches: List[PatternMatch]) -> int:
         return 0
 
     severity_weights = {
-        "critical": 40,
-        "high": 25,
-        "medium": 15,
+        "critical": 35,
+        "high": 20,
+        "medium": 10,
         "low": 5
     }
 
     score = 0
+    seen_types = set()
+
     for match in matches:
-        score += severity_weights.get(match.severity, 0)
+        weight = severity_weights.get(match.severity, 0)
+        if match.pattern_type not in seen_types:
+            score += weight
+            seen_types.add(match.pattern_type)
+        else:
+            score += weight // 2
 
     return min(score, 100)
+
+
+def analyze_risk(content: str, matches: List[PatternMatch]) -> dict:
+    risk_score = calculate_risk_score(matches)
+
+    if risk_score < 15:
+        risk_level = "low"
+    elif risk_score < 40:
+        risk_level = "medium"
+    elif risk_score < 70:
+        risk_level = "high"
+    else:
+        risk_level = "critical"
+
+    findings = []
+    for match in matches:
+        findings.append({
+            "type": match.pattern_type,
+            "severity": match.severity,
+            "matched": match.matched_text[:50],
+            "offset": match.start_offset
+        })
+
+    content_length = len(content)
+    word_count = len(content.split())
+
+    return {
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "violations_found": len(matches),
+        "unique_violation_types": len(set(m.pattern_type for m in matches)),
+        "content_stats": {
+            "characters": content_length,
+            "words": word_count
+        },
+        "findings": findings
+    }

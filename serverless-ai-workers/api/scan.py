@@ -27,14 +27,13 @@ class Handler(BaseHTTPRequestHandler):
                 risk_score = calculate_risk_score(matches)
 
                 results.append({
-                    "source": source,
                     "risk_score": risk_score,
                     "violations": len(matches),
                     "matches": [
                         {
                             "type": m.pattern_type,
                             "severity": m.severity,
-                            "content": m.matched_text,
+                            "content": m.matched_text[:50],
                             "offset": m.start_offset
                         }
                         for m in matches
@@ -49,6 +48,7 @@ class Handler(BaseHTTPRequestHandler):
 
             response = {
                 "status": "completed",
+                "source": source,
                 "entries_scanned": len(results),
                 "total_violations": total_violations,
                 "average_risk_score": round(avg_score, 2),
@@ -71,7 +71,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
@@ -82,7 +82,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
 
