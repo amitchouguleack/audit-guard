@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import { ComplianceSummary } from '@/components/ComplianceSummary'
 import { ViolationsList } from '@/components/ViolationsList'
 import { RiskChart } from '@/components/RiskChart'
@@ -27,6 +27,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadDashboard() {
+      const supabase = getSupabase()
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
@@ -52,6 +53,7 @@ export default function DashboardPage() {
   }, [router])
 
   async function loadComplianceData(orgId: string) {
+    const supabase = getSupabase()
     const { data, error } = await supabase.rpc('get_compliance_summary', {
       p_org_id: orgId
     })

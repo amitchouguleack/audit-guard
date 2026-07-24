@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -16,16 +16,22 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const supabase = getSupabase()
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      setError(error.message)
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+      } else {
+        router.push('/dashboard')
+      }
+    } catch (err) {
+      setError('Configuration error. Please check environment variables.')
       setLoading(false)
-    } else {
-      router.push('/dashboard')
     }
   }
 

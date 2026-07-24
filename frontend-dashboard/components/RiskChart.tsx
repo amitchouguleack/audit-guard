@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import {
   LineChart,
   Line,
@@ -27,6 +27,7 @@ export function RiskChart({ orgId }: RiskChartProps) {
 
   useEffect(() => {
     async function loadChartData() {
+      const supabase = getSupabase()
       const { data: logs, error } = await supabase
         .from('audit_logs')
         .select('created_at, risk_score')
